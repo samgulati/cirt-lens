@@ -32,6 +32,8 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium && npm run test:e2e
         working-directory: frontend
+        env:
+          E2E_PYTHON: python
   container:
     runs-on: ubuntu-latest
     steps:
