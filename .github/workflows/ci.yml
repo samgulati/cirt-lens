@@ -53,7 +53,17 @@ jobs:
           severity: CRITICAL,HIGH
           scanners: vuln
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with: {sarif_file: trivy.sarif}
+      - name: Enforce fixable HIGH/CRITICAL vulnerability gate
+        run: >-
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.69.2 image
+          --scanners vuln
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --exit-code 1
+          cirt-lens:${{ github.sha }}
