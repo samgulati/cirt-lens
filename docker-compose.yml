@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cirt_lens
+      POSTGRES_USER: cirt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cirt_local_password}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cirt -d cirt_lens"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://cirt:${POSTGRES_PASSWORD:-cirt_local_password}@postgres:5432/cirt_lens
+      REDIS_URL: redis://redis:6379/0
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
+      AUTH_SECRET: ${AUTH_SECRET:-local-demo-secret-change-in-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  worker:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://cirt:${POSTGRES_PASSWORD:-cirt_local_password}@postgres:5432/cirt_lens
+      REDIS_URL: redis://redis:6379/0
+    command: python -m app.worker
+    depends_on:
+      api: {condition: service_started}
+      redis: {condition: service_healthy}
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    volumes: ["./frontend:/app"]
+    ports: ["5173:5173"]
+    command: sh -c "npm install && npm run dev"
+    environment:
+      VITE_API_PROXY: http://api:8000
+    depends_on: [api]
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes: ["./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+    depends_on: [api]
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-cirt-demo-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes: ["./ops/grafana/provisioning:/etc/grafana/provisioning:ro","./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro"]
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+volumes: {postgres_data: {}, redis_data: {}}

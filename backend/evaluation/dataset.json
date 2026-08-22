@@ -1,0 +1,7 @@
+[
+  {"name":"credential-chain","scenario":"credential","expected_type":"Credential Compromise","expected_flags":["IMPOSSIBLE_TRAVEL","MFA_FATIGUE"],"expected_techniques":["T1078","T1621"],"positive":true},
+  {"name":"endpoint-chain","scenario":"endpoint","expected_type":"Endpoint Compromise","expected_flags":["SUSPICIOUS_POWERSHELL","CREDENTIAL_ACCESS"],"expected_techniques":["T1059.001","T1003"],"positive":true},
+  {"name":"exfiltration-chain","scenario":"exfiltration","expected_type":"Potential Data Exfiltration","expected_flags":["UNUSUAL_EGRESS","SENSITIVE_RESOURCE_ACCESS"],"expected_techniques":[],"positive":true},
+  {"name":"normal-login","scenario":"benign-auth","expected_type":null,"expected_flags":[],"expected_techniques":[],"positive":false},
+  {"name":"normal-process","scenario":"benign-endpoint","expected_type":null,"expected_flags":[],"expected_techniques":[],"positive":false}
+]
