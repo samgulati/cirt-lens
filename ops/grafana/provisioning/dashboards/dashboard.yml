@@ -1,0 +1,6 @@
+apiVersion: 1
+providers:
+  - name: CIRT Lens
+    folder: Security Operations
+    type: file
+    options: {path: /var/lib/grafana/dashboards}

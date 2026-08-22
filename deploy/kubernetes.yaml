@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cirt-lens-api}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: cirt-lens-api}}
+  template:
+    metadata: {labels: {app: cirt-lens-api}}
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/OWNER/cirt-lens:VERSION
+          command: ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]
+          envFrom: [{secretRef: {name: cirt-lens-secrets}}]
+          ports: [{containerPort: 8000}]
+          readinessProbe: {httpGet: {path: /api/ready, port: 8000}, initialDelaySeconds: 5, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /api/health, port: 8000}, initialDelaySeconds: 15, periodSeconds: 20}
+          resources: {requests: {cpu: 200m, memory: 256Mi}, limits: {cpu: "1", memory: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cirt-lens-worker}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: cirt-lens-worker}}
+  template:
+    metadata: {labels: {app: cirt-lens-worker}}
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/OWNER/cirt-lens:VERSION
+          command: ["python","-m","app.worker"]
+          envFrom: [{secretRef: {name: cirt-lens-secrets}}]
+          resources: {requests: {cpu: 200m, memory: 256Mi}, limits: {cpu: "1", memory: 1Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: cirt-lens-api}
+spec: {selector: {app: cirt-lens-api}, ports: [{port: 80, targetPort: 8000}]}

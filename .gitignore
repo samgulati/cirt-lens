@@ -1,0 +1,50 @@
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.db
+.env
+.env.*
+!.env.example
+.DS_Store
+.venv/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.coverage
+htmlcov/
+
+# Local IDE and operating-system state
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Private interview preparation and rehearsal material
+docs/interview-notes.md
+docs/demo-script.md
+docs/limitations.md
+docs/private/
+interview-notes/
+personal-notes/
+*.private.md
+*.local.md
+
+# Locally generated evaluation, benchmark, and load-test output
+artifacts/
+reports/
+backend/evaluation/results/
+backend/benchmarks/results/
+load-tests/results/
+*.log
+
+# Local secrets, credentials, certificates, and deployment overrides
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+docker-compose.override.yml
+render.local.yaml
