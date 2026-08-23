@@ -69,11 +69,11 @@ async def validation_error(request:Request,exc:RequestValidationError): return J
 async def server_error(request:Request,exc:Exception):
     logger.exception("unhandled_request_error",extra={"operation":"unhandled_request_error","path":request.url.path});return JSONResponse(problem(500,"Internal server error","The request could not be completed.",request.headers.get("x-request-id")),status_code=500)
 
-def get_incident(iid,db):
-    value=db.get(Incident,iid)
+def get_incident(iid,db,tenant_id):
+    value=db.query(Incident).filter_by(id=iid,tenant_id=tenant_id).first()
     if not value: raise HTTPException(404,"Incident not found")
     return value
-def incident_events(value,db): return db.query(Event).filter(Event.id.in_(json.loads(value.event_ids))).order_by(Event.timestamp).all()
+def incident_events(value,db): return db.query(Event).filter(Event.tenant_id==value.tenant_id,Event.id.in_(json.loads(value.event_ids))).order_by(Event.timestamp).all()
 
 @app.get("/api/health")
 def health(): return {"status":"operational","mode":"demo","pipeline":"raw→detect→correlate→score"}
@@ -91,37 +91,37 @@ def ready(db:Session=Depends(get_db)):
     if settings.auth_required and dependencies["redis"]!="reachable":raise HTTPException(503,f"Required dependency unavailable: redis ({dependencies.get('redis_scheme')}/{dependencies.get('redis_error')})")
     return {"status":"ready","dependencies":dependencies}
 
-@app.get("/api/dashboard",dependencies=[Depends(require_permission("incidents:read"))])
-def dashboard(db:Session=Depends(get_db)):
-    incidents=db.query(Incident).order_by(Incident.created_at.desc()).all(); events=db.query(Event).all(); counts={s:sum(i.severity==s for i in incidents) for s in ["CRITICAL","HIGH","MEDIUM","LOW"]}
+@app.get("/api/dashboard")
+def dashboard(p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)):
+    incidents=db.query(Incident).filter_by(tenant_id=p.tenant_id).order_by(Incident.created_at.desc()).all(); events=db.query(Event).filter_by(tenant_id=p.tenant_id).all(); counts={s:sum(i.severity==s for i in incidents) for s in ["CRITICAL","HIGH","MEDIUM","LOW"]}
     trend=[]
     for h in range(24):
         start=utcnow().replace(minute=0,second=0,microsecond=0)-timedelta(hours=23-h); end=start+timedelta(hours=1); trend.append({"hour":start.strftime("%H:00"),"incidents":sum(start<=i.created_at<end for i in incidents)})
     triage=[]
     for item in incidents:
-        first=db.query(Activity).filter(Activity.incident_id==item.id,Activity.action=="STATUS_INVESTIGATING").order_by(Activity.timestamp).first()
+        first=db.query(Activity).filter(Activity.tenant_id==p.tenant_id,Activity.incident_id==item.id,Activity.action=="STATUS_INVESTIGATING").order_by(Activity.timestamp).first()
         if first: triage.append(max(0,(first.timestamp-item.created_at).total_seconds()))
     seconds=sum(triage)/len(triage) if triage else None
-    finding_count=db.query(DetectionFindingRecord).count()
+    event_ids={event.id for event in events};finding_count=db.query(DetectionFindingRecord).filter(DetectionFindingRecord.event_id.in_(event_ids)).count() if event_ids else 0
     return {"kpis":{"open_incidents":sum(i.status!="RESOLVED" for i in incidents),"critical_incidents":counts["CRITICAL"],"events_analyzed":len(events),"detection_findings":finding_count,"mean_triage_time":"N/A" if seconds is None else f"{int(seconds//60)}m {int(seconds%60)}s"},"severity":counts,"trend":trend,"sources":{s:sum(e.source==s and e.risk_score>0 for e in events) for s in ["Identity","Endpoint","Network","Cloud"]},"recent":[serialize_incident(i) for i in incidents[:8]]}
 
-@app.get("/api/incidents",dependencies=[Depends(require_permission("incidents:read"))])
-def incidents(status:str="",severity:str="",offset:int=Query(0,ge=0),limit:int=Query(100,ge=1,le=500),db:Session=Depends(get_db)):
-    query=db.query(Incident)
+@app.get("/api/incidents")
+def incidents(status:str="",severity:str="",offset:int=Query(0,ge=0),limit:int=Query(100,ge=1,le=500),p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)):
+    query=db.query(Incident).filter_by(tenant_id=p.tenant_id)
     if status: query=query.filter(Incident.status==status.upper())
     if severity: query=query.filter(Incident.severity==severity.upper())
     return [serialize_incident(i) for i in query.order_by(Incident.created_at.desc()).offset(offset).limit(limit)]
-@app.get("/api/incidents/{iid}",dependencies=[Depends(require_permission("incidents:read"))])
-def incident(iid:str,db:Session=Depends(get_db)):
-    value=get_incident(iid,db); return serialize_incident(value,incident_events(value,db),db)
-@app.get("/api/incidents/{iid}/timeline",dependencies=[Depends(require_permission("incidents:read"))])
-def timeline(iid:str,db:Session=Depends(get_db)): return [serialize_event(e) for e in incident_events(get_incident(iid,db),db)]
-@app.get("/api/incidents/{iid}/evidence",dependencies=[Depends(require_permission("incidents:read"))])
-def evidence(iid:str,db:Session=Depends(get_db)): return timeline(iid,db)
+@app.get("/api/incidents/{iid}")
+def incident(iid:str,p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)):
+    value=get_incident(iid,db,p.tenant_id); return serialize_incident(value,incident_events(value,db),db)
+@app.get("/api/incidents/{iid}/timeline")
+def timeline(iid:str,p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)): return [serialize_event(e) for e in incident_events(get_incident(iid,db,p.tenant_id),db)]
+@app.get("/api/incidents/{iid}/evidence")
+def evidence(iid:str,p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)): return timeline(iid,p,db)
 
 @app.post("/api/incidents/{iid}/actions")
 def action(iid:str,body:ActionRequest,p:Principal=Depends(require_permission("actions:execute")),db:Session=Depends(get_db)):
-    value=get_incident(iid,db); actions=json.loads(value.recommended_actions); selected=next((a for a in actions if a["action"].lower()==body.action.lower()),None)
+    value=get_incident(iid,db,p.tenant_id); actions=json.loads(value.recommended_actions); selected=next((a for a in actions if a["action"].lower()==body.action.lower()),None)
     if not selected: raise HTTPException(400,"Action is not recommended for this incident")
     if selected["status"]=="EXECUTED": raise HTTPException(409,"Action has already been executed")
     high_impact=selected.get("reduction_points",0)>=12
@@ -144,72 +144,72 @@ def action(iid:str,body:ActionRequest,p:Principal=Depends(require_permission("ac
     except Exception:db.rollback();raise
     ACTIONS.labels(selected["action"],"SUCCESS").inc();return {"ok":True,"containment_progress":progress,"connector_execution":{"id":execution.id,"provider_request_id":execution.provider_request_id,"status":execution.status,"dry_run":execution.dry_run},"incident":serialize_incident(value)}
 
-@app.patch("/api/incidents/{iid}",dependencies=[Depends(require_permission("incidents:resolve"))])
-def update_incident(iid:str,body:StatusRequest,db:Session=Depends(get_db)):
-    value=get_incident(iid,db)
+@app.patch("/api/incidents/{iid}")
+def update_incident(iid:str,body:StatusRequest,p:Principal=Depends(require_permission("incidents:resolve")),db:Session=Depends(get_db)):
+    value=get_incident(iid,db,p.tenant_id)
     target=body.status.value
     if target=="CONTAINED":raise HTTPException(409,"CONTAINED is derived only after required simulated response objectives are completed")
     allowed={"NEW":{"INVESTIGATING"},"INVESTIGATING":{"RESOLVED"},"CONTAINED":{"RESOLVED"},"RESOLVED":set()}
     if target!=value.status and target not in allowed.get(value.status,set()):raise HTTPException(409,f"Invalid workflow transition: {value.status} to {target}")
     now=utcnow(); value.status=target
     if target=="INVESTIGATING": value.assigned_to="analyst@demo"; value.triaged_at=value.triaged_at or now
-    value.updated_at=now; db.add(Activity(timestamp=now,analyst="analyst@demo",action=f"STATUS_{target}",incident_id=iid,result="SUCCESS",details="Incident workflow updated.")); db.commit(); return serialize_incident(value)
+    value.updated_at=now; db.add(Activity(timestamp=now,analyst=p.email,action=f"STATUS_{target}",incident_id=iid,result="SUCCESS",details="Incident workflow updated.",tenant_id=p.tenant_id)); db.commit(); return serialize_incident(value)
 
-@app.post("/api/incidents/{iid}/notes",status_code=201,dependencies=[Depends(require_permission("incidents:write"))])
-def add_note(iid:str,body:NoteRequest,db:Session=Depends(get_db)):
-    get_incident(iid,db);now=utcnow();note=AnalystNote(incident_id=iid,analyst=body.analyst,text=body.text,timestamp=now);db.add(note);db.add(Activity(timestamp=now,analyst=body.analyst,action="NOTE_ADDED",incident_id=iid,result="SUCCESS",details="Analyst case note added."));db.commit();db.refresh(note);return {"id":note.id,"timestamp":now.isoformat()+"Z"}
-@app.post("/api/incidents/{iid}/bookmarks",status_code=201,dependencies=[Depends(require_permission("incidents:write"))])
-def add_bookmark(iid:str,body:BookmarkRequest,db:Session=Depends(get_db)):
-    value=get_incident(iid,db)
+@app.post("/api/incidents/{iid}/notes",status_code=201)
+def add_note(iid:str,body:NoteRequest,p:Principal=Depends(require_permission("incidents:write")),db:Session=Depends(get_db)):
+    get_incident(iid,db,p.tenant_id);now=utcnow();note=AnalystNote(incident_id=iid,analyst=p.email,text=body.text,timestamp=now);db.add(note);db.add(Activity(timestamp=now,analyst=p.email,action="NOTE_ADDED",incident_id=iid,result="SUCCESS",details="Analyst case note added.",tenant_id=p.tenant_id));db.commit();db.refresh(note);return {"id":note.id,"timestamp":now.isoformat()+"Z"}
+@app.post("/api/incidents/{iid}/bookmarks",status_code=201)
+def add_bookmark(iid:str,body:BookmarkRequest,p:Principal=Depends(require_permission("incidents:write")),db:Session=Depends(get_db)):
+    value=get_incident(iid,db,p.tenant_id)
     if body.event_id not in json.loads(value.event_ids):raise HTTPException(400,"Event does not belong to this incident")
     if db.query(EvidenceBookmark).filter_by(incident_id=iid,event_id=body.event_id).first():raise HTTPException(409,"Evidence is already bookmarked")
-    now=utcnow();bookmark=EvidenceBookmark(incident_id=iid,event_id=body.event_id,analyst=body.analyst,note=body.note,timestamp=now);db.add(bookmark);db.add(Activity(timestamp=now,analyst=body.analyst,action="EVIDENCE_BOOKMARKED",incident_id=iid,result="SUCCESS",details=f"Bookmarked {body.event_id}."));db.commit();db.refresh(bookmark);return {"id":bookmark.id,"event_id":body.event_id}
-@app.patch("/api/incidents/{iid}/disposition",dependencies=[Depends(require_permission("incidents:write"))])
-def set_disposition(iid:str,body:DispositionRequest,db:Session=Depends(get_db)):
-    value=get_incident(iid,db);value.disposition=body.disposition.value;value.updated_at=utcnow();db.add(Activity(timestamp=value.updated_at,analyst=body.analyst,action=f"DISPOSITION_{body.disposition.value}",incident_id=iid,result="SUCCESS",details="Analyst disposition updated."));db.commit();return serialize_incident(value)
+    now=utcnow();bookmark=EvidenceBookmark(incident_id=iid,event_id=body.event_id,analyst=p.email,note=body.note,timestamp=now);db.add(bookmark);db.add(Activity(timestamp=now,analyst=p.email,action="EVIDENCE_BOOKMARKED",incident_id=iid,result="SUCCESS",details=f"Bookmarked {body.event_id}.",tenant_id=p.tenant_id));db.commit();db.refresh(bookmark);return {"id":bookmark.id,"event_id":body.event_id}
+@app.patch("/api/incidents/{iid}/disposition")
+def set_disposition(iid:str,body:DispositionRequest,p:Principal=Depends(require_permission("incidents:write")),db:Session=Depends(get_db)):
+    value=get_incident(iid,db,p.tenant_id);value.disposition=body.disposition.value;value.updated_at=utcnow();db.add(Activity(timestamp=value.updated_at,analyst=p.email,action=f"DISPOSITION_{body.disposition.value}",incident_id=iid,result="SUCCESS",details="Analyst disposition updated.",tenant_id=p.tenant_id));db.commit();return serialize_incident(value)
 
-@app.post("/api/incidents/{iid}/ask",dependencies=[Depends(require_permission("incidents:read"))])
-def ask(iid:str,body:AskRequest,db:Session=Depends(get_db)):
-    value=get_incident(iid,db); return investigate(value,incident_events(value,db),body.question)
+@app.post("/api/incidents/{iid}/ask")
+def ask(iid:str,body:AskRequest,p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)):
+    value=get_incident(iid,db,p.tenant_id); return investigate(value,incident_events(value,db),body.question)
 
-@app.post("/api/demo/generate",dependencies=[Depends(require_permission("telemetry:ingest"))])
-def demo(body:DemoRequest,db:Session=Depends(get_db)):
+@app.post("/api/demo/generate")
+def demo(body:DemoRequest,p:Principal=Depends(require_permission("telemetry:ingest")),db:Session=Depends(get_db)):
     if body.scenario not in ["credential","endpoint","exfiltration"]: raise HTTPException(400,"Unknown scenario")
-    raw=generate_raw_scenario(body.scenario,db.query(Event).count()+1001); created,_,_=process_raw_telemetry(db,raw,BASELINE_DEVICES)
+    raw=generate_raw_scenario(body.scenario,db.query(Event).count()+1001); created,_,_=process_raw_telemetry(db,raw,BASELINE_DEVICES,tenant_id=p.tenant_id)
     if not created: raise HTTPException(422,"Generated telemetry did not pass correlation threshold")
     generated_ids={event.id for event in raw}
     selected=max(created,key=lambda item:len(generated_ids&set(json.loads(item.event_ids))))
     return serialize_incident(selected,incident_events(selected,db),db)
 
-@app.get("/api/events",dependencies=[Depends(require_permission("telemetry:read"))])
-def events(q:str=Query("",max_length=100),source:str=Query("",max_length=30),flag:str=Query("",max_length=80),start:datetime|None=None,end:datetime|None=None,offset:int=Query(0,ge=0),limit:int=Query(500,ge=1,le=1000),db:Session=Depends(get_db)):
-    query=db.query(Event)
+@app.get("/api/events")
+def events(q:str=Query("",max_length=100),source:str=Query("",max_length=30),flag:str=Query("",max_length=80),start:datetime|None=None,end:datetime|None=None,offset:int=Query(0,ge=0),limit:int=Query(500,ge=1,le=1000),p:Principal=Depends(require_permission("telemetry:read")),db:Session=Depends(get_db)):
+    query=db.query(Event).filter_by(tenant_id=p.tenant_id)
     if source: query=query.filter(Event.source==source)
     if flag: query=query.filter(Event.risk_flags.contains(flag))
     if start:query=query.filter(Event.timestamp>=start)
     if end:query=query.filter(Event.timestamp<=end)
     if q: query=query.filter(or_(Event.user.contains(q),Event.host.contains(q),Event.source_ip.contains(q),Event.activity.contains(q),Event.risk_flags.contains(q)))
     return [serialize_event(e) for e in query.order_by(Event.timestamp.desc()).offset(offset).limit(limit)]
-@app.get("/api/hunt",dependencies=[Depends(require_permission("telemetry:read"))])
-def hunt(query:str=Query("",max_length=150),db:Session=Depends(get_db)):
-    field,value=(query.split(":",1)+[""])[:2] if ":" in query else ("all",query); column={"user":Event.user,"host":Event.host,"ip":Event.source_ip,"flag":Event.risk_flags}.get(field); statement=db.query(Event)
+@app.get("/api/hunt")
+def hunt(query:str=Query("",max_length=150),p:Principal=Depends(require_permission("telemetry:read")),db:Session=Depends(get_db)):
+    field,value=(query.split(":",1)+[""])[:2] if ":" in query else ("all",query); column={"user":Event.user,"host":Event.host,"ip":Event.source_ip,"flag":Event.risk_flags}.get(field); statement=db.query(Event).filter_by(tenant_id=p.tenant_id)
     if value: statement=statement.filter(column.contains(value) if column is not None else or_(Event.user.contains(value),Event.host.contains(value),Event.source_ip.contains(value),Event.activity.contains(value),Event.risk_flags.contains(value)))
     return [serialize_event(e) for e in statement.order_by(Event.timestamp.desc()).limit(300)]
 
-@app.get("/api/search",dependencies=[Depends(require_permission("telemetry:read"))])
-def search(q:str=Query(min_length=2,max_length=100),db:Session=Depends(get_db)):
-    found=db.query(Incident).filter(or_(Incident.id.contains(q),Incident.title.contains(q),Incident.primary_user.contains(q),Incident.primary_host.contains(q))).limit(5).all(); ev=db.query(Event).filter(or_(Event.id.contains(q),Event.user.contains(q),Event.host.contains(q),Event.source_ip.contains(q),Event.activity.contains(q))).order_by(Event.timestamp.desc()).limit(8).all()
-    def values(attribute): return sorted({getattr(e,attribute) for e in db.query(Event).filter(getattr(Event,attribute).contains(q)).limit(20) if getattr(e,attribute)})[:5]
+@app.get("/api/search")
+def search(q:str=Query(min_length=2,max_length=100),p:Principal=Depends(require_permission("telemetry:read")),db:Session=Depends(get_db)):
+    found=db.query(Incident).filter(Incident.tenant_id==p.tenant_id,or_(Incident.id.contains(q),Incident.title.contains(q),Incident.primary_user.contains(q),Incident.primary_host.contains(q))).limit(5).all(); ev=db.query(Event).filter(Event.tenant_id==p.tenant_id,or_(Event.id.contains(q),Event.user.contains(q),Event.host.contains(q),Event.source_ip.contains(q),Event.activity.contains(q))).order_by(Event.timestamp.desc()).limit(8).all()
+    def values(attribute): return sorted({getattr(e,attribute) for e in db.query(Event).filter(Event.tenant_id==p.tenant_id,getattr(Event,attribute).contains(q)).limit(20) if getattr(e,attribute)})[:5]
     return {"incidents":[serialize_incident(i) for i in found],"users":values("user"),"hosts":values("host"),"ips":values("source_ip"),"events":[serialize_event(e) for e in ev]}
 
 @app.get("/api/playbooks",dependencies=[Depends(require_permission("rules:read"))])
 def playbooks(): return [{**p,"actions":list(p["actions"])} for p in PLAYBOOKS]
-@app.get("/api/activity",dependencies=[Depends(require_permission("audit:read"))])
-def activity(db:Session=Depends(get_db)): return [{"id":a.id,"timestamp":a.timestamp.isoformat()+"Z","analyst":a.analyst,"action":a.action,"incident_id":a.incident_id,"result":a.result,"details":a.details} for a in db.query(Activity).order_by(Activity.timestamp.desc()).all()]
+@app.get("/api/activity")
+def activity(p:Principal=Depends(require_permission("audit:read")),db:Session=Depends(get_db)): return [{"id":a.id,"timestamp":a.timestamp.isoformat()+"Z","analyst":a.analyst,"action":a.action,"incident_id":a.incident_id,"result":a.result,"details":a.details} for a in db.query(Activity).filter_by(tenant_id=p.tenant_id).order_by(Activity.timestamp.desc()).all()]
 
-@app.get("/api/incidents/{iid}/report",response_class=PlainTextResponse,dependencies=[Depends(require_permission("incidents:read"))])
-def report(iid:str,db:Session=Depends(get_db)):
-    value=get_incident(iid,db); event_list=incident_events(value,db); ids=json.loads(value.event_ids);techniques=json.loads(value.techniques); actions=json.loads(value.recommended_actions); audit=db.query(Activity).filter(Activity.incident_id==iid).order_by(Activity.timestamp).all();findings=db.query(DetectionFindingRecord).filter(DetectionFindingRecord.event_id.in_(ids)).all();notes=db.query(AnalystNote).filter_by(incident_id=iid).order_by(AnalystNote.timestamp).all();bookmarks=db.query(EvidenceBookmark).filter_by(incident_id=iid).order_by(EvidenceBookmark.timestamp).all();history=db.query(IncidentRiskHistory).filter_by(incident_id=iid).order_by(IncidentRiskHistory.timestamp).all();progress=containment_progress({f.flag for f in findings},actions)
+@app.get("/api/incidents/{iid}/report",response_class=PlainTextResponse)
+def report(iid:str,p:Principal=Depends(require_permission("incidents:read")),db:Session=Depends(get_db)):
+    value=get_incident(iid,db,p.tenant_id); event_list=incident_events(value,db); ids=json.loads(value.event_ids);techniques=json.loads(value.techniques); actions=json.loads(value.recommended_actions); audit=db.query(Activity).filter(Activity.tenant_id==p.tenant_id,Activity.incident_id==iid).order_by(Activity.timestamp).all();findings=db.query(DetectionFindingRecord).filter(DetectionFindingRecord.event_id.in_(ids)).all();notes=db.query(AnalystNote).filter_by(incident_id=iid).order_by(AnalystNote.timestamp).all();bookmarks=db.query(EvidenceBookmark).filter_by(incident_id=iid).order_by(EvidenceBookmark.timestamp).all();history=db.query(IncidentRiskHistory).filter_by(incident_id=iid).order_by(IncidentRiskHistory.timestamp).all();progress=containment_progress({f.flag for f in findings},actions)
     lines=["# CIRT Lens Incident Report","","> Generated from synthetic demonstration telemetry.","> CIRT Lens is a portfolio demonstration and does not perform real containment.","> Analyst notes are untrusted user-authored text reproduced verbatim.","",f"**Incident ID:** {value.id}  ",f"**Incident Fingerprint:** {value.incident_fingerprint or 'legacy/unavailable'}  ",f"**Incident Type:** {value.incident_type}  ",f"**Severity:** {value.severity}  ",f"**Status:** {value.status}  ",f"**Disposition:** {value.disposition}  ",f"**Original Risk:** {value.risk_score}/100  ",f"**Residual Risk:** {value.residual_risk_score}/100  ",f"**Evidence Confidence:** {value.confidence_score}/100","","## Executive Summary","",value.description,"","## Root Cause Hypothesis","",value.root_cause,"","## Risk Breakdown","",*['- '+k+': '+str(v) for k,v in json.loads(value.score_breakdown).items()],"","## Evidence Confidence Breakdown","",*['- '+k+': '+str(v) for k,v in json.loads(value.confidence_breakdown or '{}').items()],"","## Timeline","",*[f"- {e.timestamp.isoformat()}Z — **{e.id}** — {e.activity}" for e in event_list],"","## Evidence","",*[f"- {e.id}: {e.source}; flags: {', '.join(json.loads(e.risk_flags)) or 'none'}; risk: {e.risk_score}" for e in event_list],"","## Detection Findings","",*[f"- {f.rule_id} v{f.rule_version} — {f.flag} on {f.event_id}: {f.reason}" for f in findings],"","## MITRE ATT&CK","",*[f"- {t['id']} {t['name']}: {t['reason']} Evidence: {', '.join(t['evidence_ids'])}" for t in techniques],"","## Case Notes","",*([f"- {n.timestamp.isoformat()}Z {n.analyst}: {n.text}" for n in notes] or ["- None"]),"","## Bookmarked Evidence","",*([f"- {b.event_id}: {b.note or 'No note'}" for b in bookmarks] or ["- None"]),"","## Containment Objectives","",*[f"- {o['id']}: {'complete' if o['complete'] else 'pending'}" for o in progress['objectives']],"","## Executed and Recommended Actions","",*[f"- {a['action']} — {a['status']}" for a in actions],"","## Risk History","",*[f"- {h.timestamp.isoformat()}Z — {h.original_risk} → {h.residual_risk}: {h.reason}" for h in history],"","## Audit Summary","",*[f"- {a.timestamp.isoformat()}Z {a.analyst} {a.action} {a.result}" for a in audit],"","## Recommended Follow-Up","","Validate ownership, review adjacent telemetry, confirm scope, and preserve evidence.","",f"Generated: {utcnow().isoformat()}Z"]
     return "\n".join(lines)
 
