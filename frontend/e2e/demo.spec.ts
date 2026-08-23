@@ -20,7 +20,7 @@ test('hiring manager credential-compromise workflow',async({page})=>{
   await page.getByRole('button',{name:'What probably happened?'}).click();
   await expect(page.getByText(/Likely credential compromise/i)).toBeVisible();
   await page.getByRole('button',{name:'Response'}).click();
-  await page.getByRole('button',{name:'Execute',exact:true}).first().click();
+  await page.locator('.grid-table').filter({hasText:'Force password reset'}).getByRole('button',{name:'Execute',exact:true}).click();
   await page.getByRole('button',{name:'Confirm Execute'}).click();
   await expect(page.getByText(/Residual Risk/i)).toBeVisible();
   await page.getByRole('button',{name:'Case'}).click();
@@ -34,7 +34,7 @@ test('hiring manager credential-compromise workflow',async({page})=>{
   await page.getByRole('button',{name:'Bookmark'}).click();
   await expect(page.locator('section').filter({hasText:'Bookmarked Evidence'}).getByText(/AUTH-/).first()).toBeVisible();
   await page.getByRole('link',{name:'Activity'}).click();
-  await expect(page.getByText('REVOKE_ACTIVE_SESSIONS').first()).toBeVisible();
+  await expect(page.getByText('FORCE_PASSWORD_RESET').first()).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
 
@@ -53,10 +53,10 @@ test('endpoint compromise evidence and containment workflow',async({page})=>{
   await expect(page.getByText('T1059.001')).toBeVisible();
   await expect(page.getByText('T1003')).toBeVisible();
   await page.getByRole('button',{name:'Response'}).click();
-  await page.getByRole('button',{name:'Execute',exact:true}).first().click();
+  await page.locator('.grid-table').filter({hasText:'Kill suspicious process'}).getByRole('button',{name:'Execute',exact:true}).click();
   await page.getByRole('button',{name:'Confirm Execute'}).click();
   await expect(page.getByText('Executed').first()).toBeVisible();
   await page.getByRole('link',{name:'Activity'}).click();
-  await expect(page.getByText('ISOLATE_HOST').first()).toBeVisible();
+  await expect(page.getByText('KILL_SUSPICIOUS_PROCESS').first()).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });

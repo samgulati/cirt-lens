@@ -1,5 +1,5 @@
 import httpx,pytest
-from app.connectors import Auth0IdentityConnector,ConnectorError
+from app.connectors import Auth0IdentityConnector,ConnectorError,RoutedIdentityConnector
 
 DOMAIN="dev-example.us.auth0.com"
 TARGET="connector-target@cirtlens.demo"
@@ -34,3 +34,8 @@ def test_auth0_supports_only_truthful_account_disable_action():
     connector=Auth0IdentityConnector(DOMAIN,"client","secret",TARGET,TARGET)
     with pytest.raises(ConnectorError,match="does not support"):
         connector.execute("Revoke active sessions",TARGET,"key",dry_run=True)
+
+def test_router_keeps_non_auth0_actions_safe_and_simulated():
+    auth0=Auth0IdentityConnector(DOMAIN,"client","secret",TARGET,TARGET,httpx.MockTransport(lambda _:(_ for _ in ()).throw(AssertionError("unexpected provider call"))))
+    result=RoutedIdentityConnector(auth0).execute("Isolate host","host-1","key",dry_run=False)
+    assert result.status=="SUCCEEDED" and result.provider_request_id.startswith("FAKE-") and "no external system modified" in result.detail
