@@ -27,8 +27,19 @@ services:
       DATABASE_URL: postgresql+psycopg://cirt:${POSTGRES_PASSWORD:-cirt_local_password}@postgres:5432/cirt_lens
       REDIS_URL: redis://redis:6379/0
       AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
+      AUTH_MODE: ${AUTH_MODE:-local}
       AUTH_SECRET: ${AUTH_SECRET:-local-demo-secret-change-in-production}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-cirt-lens}
+      OIDC_CLAIM_NAMESPACE: ${OIDC_CLAIM_NAMESPACE:-https://github.com/samgulati/cirt-lens}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CONNECTOR_MODE: ${CONNECTOR_MODE:-fake}
+      AUTH0_CONNECTOR_LIVE: ${AUTH0_CONNECTOR_LIVE:-false}
+      AUTH0_ALLOWED_TARGET_USERS: ${AUTH0_ALLOWED_TARGET_USERS:-}
+      AUTH0_CONNECTOR_TARGET_USER: ${AUTH0_CONNECTOR_TARGET_USER:-}
+      AUTH0_MANAGEMENT_CLIENT_ID: ${AUTH0_MANAGEMENT_CLIENT_ID:-}
+      AUTH0_MANAGEMENT_CLIENT_SECRET: ${AUTH0_MANAGEMENT_CLIENT_SECRET:-}
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     depends_on:
       postgres: {condition: service_healthy}
@@ -50,6 +61,9 @@ services:
     command: sh -c "npm install && npm run dev"
     environment:
       VITE_API_PROXY: http://api:8000
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:-}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:-}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE:-}
     depends_on: [api]
   prometheus:
     image: prom/prometheus:v3.5.0

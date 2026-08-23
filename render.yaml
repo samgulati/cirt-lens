@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: cirt-lens
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerCommand: sh -ec 'python -m alembic upgrade head; python -m app.worker & exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}'
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: AUTH_MODE
+        value: oidc
+      - key: DEFAULT_TENANT_ID
+        value: cirt-lens-demo
+      - key: OIDC_ISSUER
+        value: https://dev-7gml268v0z77w2wy.us.auth0.com/
+      - key: OIDC_JWKS_URL
+        value: https://dev-7gml268v0z77w2wy.us.auth0.com/.well-known/jwks.json
+      - key: OIDC_AUDIENCE
+        value: https://api.cirt-lens.local
+      - key: OIDC_CLAIM_NAMESPACE
+        value: https://github.com/samgulati/cirt-lens
+      - key: VITE_AUTH0_DOMAIN
+        value: dev-7gml268v0z77w2wy.us.auth0.com
+      - key: VITE_AUTH0_CLIENT_ID
+        value: zl4YbdhokWzb6uuaJZaW4YcUT6u3dlOl
+      - key: VITE_AUTH0_AUDIENCE
+        value: https://api.cirt-lens.local
+      - key: CONNECTOR_MODE
+        value: auth0
+      - key: AUTH0_CONNECTOR_LIVE
+        value: "false"
+      - key: AUTH0_ALLOWED_TARGET_USERS
+        value: connector-target@cirtlens.demo
+      - key: AUTH0_CONNECTOR_TARGET_USER
+        value: connector-target@cirtlens.demo
+      - key: AUTH0_MANAGEMENT_CLIENT_ID
+        value: 6HbRT5DMHctPoCcy7mVGLPM6FlRT0H2C
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: AUTH0_MANAGEMENT_CLIENT_SECRET
+        sync: false
