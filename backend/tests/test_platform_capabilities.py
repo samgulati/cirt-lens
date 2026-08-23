@@ -2,8 +2,8 @@ import json
 from fastapi.testclient import TestClient
 from app.main import app
 from app.database import get_db
-from app.auth import seed_identity
-from app.models import IngestionJob,DetectionRule,ActionApproval
+from app.auth import seed_identity,hash_password
+from app.models import IngestionJob,DetectionRule,ActionApproval,Tenant,UserAccount,Incident
 from app.services.pipeline import process_raw_telemetry
 from app.services.scenario_generator import generate_raw_scenario
 from app.seed.seed_data import BASELINE_DEVICES
@@ -32,6 +32,23 @@ def test_two_person_approval_rejects_self_approval(db):
     assert self_requested.status_code==201
     assert client.post(f"/api/approvals/{self_requested.json()['id']}/approve",headers=admin).status_code==409
     assert db.get(ActionApproval,approval_id).status=='APPROVED';app.dependency_overrides.clear()
+
+def test_incident_reads_actions_and_demo_generation_are_tenant_scoped(db,now):
+    seed_identity(db)
+    incident=process_raw_telemetry(db,generate_raw_scenario('credential',30101,now),BASELINE_DEVICES,tenant_id='tenant-demo')[0][0]
+    db.add(Tenant(id='tenant-other',name='Other tenant',created_at=now))
+    db.add(UserAccount(id='USR-OTHER-RESPONDER',tenant_id='tenant-other',email='other-responder@demo.local',display_name='Other Responder',role='RESPONDER',password_hash=hash_password('DemoPass!2026'),active=True,created_at=now))
+    db.add(UserAccount(id='USR-OTHER-ADMIN',tenant_id='tenant-other',email='other-admin@demo.local',display_name='Other Admin',role='ADMINISTRATOR',password_hash=hash_password('DemoPass!2026'),active=True,created_at=now));db.commit()
+    client=client_for(db);responder=login(client,'other-responder@demo.local');admin=login(client,'other-admin@demo.local')
+    assert client.get(f'/api/incidents/{incident.id}',headers=responder).status_code==404
+    assert client.get('/api/incidents',headers=responder).json()==[]
+    assert client.get('/api/dashboard',headers=responder).json()['kpis']['open_incidents']==0
+    assert client.get('/api/events',headers=responder).json()==[]
+    assert client.post(f'/api/incidents/{incident.id}/approvals',json={'action':'Revoke active sessions'},headers=responder).status_code==404
+    generated=client.post('/api/demo/generate',json={'scenario':'credential'},headers=admin);assert generated.status_code==200
+    assert db.get(Incident,generated.json()['id']).tenant_id=='tenant-other'
+    assert len(client.get('/api/incidents',headers=responder).json())==1
+    app.dependency_overrides.clear()
 
 def test_ingestion_idempotency_and_processing_visibility(db,monkeypatch,now):
     seed_identity(db);client=client_for(db);admin=login(client,'admin@demo.local');raw=generate_raw_scenario('endpoint',30002,now)[0].model_dump(mode='json')
