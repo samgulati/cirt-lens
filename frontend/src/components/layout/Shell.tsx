@@ -15,6 +15,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import { api } from "../../api/client";
 import type { Incident, SearchResults } from "../../types";
+import {useAuthorization} from "../../auth/authorization";
 function Clock() {
   const [time, setTime] = useState(new Date());
   useEffect(() => {
@@ -158,6 +159,7 @@ function GlobalSearch() {
 }
 export default function Shell({ children }: { children: ReactNode }) {
   const nav = useNavigate();
+  const {can}=useAuthorization();
   const [modal, setModal] = useState(false),
     [scenario, setScenario] = useState("credential"),
     [busy, setBusy] = useState(false),
@@ -234,13 +236,13 @@ export default function Shell({ children }: { children: ReactNode }) {
         <header className="h-16 sticky top-0 z-10 bg-[#08131c]/95 backdrop-blur border-b border-[#1c3445] flex items-center px-6 gap-5">
           <GlobalSearch />
           <Clock />
-          <button
+          {can("telemetry:ingest")&&<button
             onClick={() => setModal(true)}
             className="btn btn-primary flex gap-2 items-center"
           >
             <Sparkles size={15} />
             Generate Demo Incident
-          </button>
+          </button>}
           {import.meta.env.VITE_AUTH0_DOMAIN && <AuthUser />}
         </header>
         <div className="p-6">{children}</div>

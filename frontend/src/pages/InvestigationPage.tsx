@@ -11,7 +11,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { api,apiText } from "../api/client";
+import {useAuthorization} from "../auth/authorization";
 import {
   ErrorPanel,
   EventRows,
@@ -335,6 +336,7 @@ function ResponsePanel({
   reload: () => void;
   notify: (message: string) => void;
 }) {
+  const {can}=useAuthorization();
   const [confirm, setConfirm] = useState<RecommendedAction>(),
     [error, setError] = useState("");
   const execute = async () => {
@@ -372,8 +374,7 @@ function ResponsePanel({
       </div>
       <div className="flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 p-3 rounded mb-4">
         <AlertTriangle size={15} />
-        All reductions and response actions are deterministic simulations. No
-        real infrastructure is modified.
+        {can("actions:execute")?"High-impact actions require approval and may invoke an allowlisted sandbox connector.":"Read-only response view. Your role cannot execute actions."}
       </div>
       {error && <div className="mb-3 text-xs text-red-300">{error}</div>}
       <div className="panel overflow-hidden">
@@ -396,7 +397,7 @@ function ResponsePanel({
               {action.status}
             </span>
             <button
-              disabled={action.status === "EXECUTED"}
+              disabled={action.status === "EXECUTED"||!can("actions:execute")}
               onClick={() => setConfirm(action)}
               className="btn"
             >
@@ -436,6 +437,7 @@ function CasePanel({
   reload: () => void;
   notify: (message: string) => void;
 }) {
+  const {can}=useAuthorization();
   const [note, setNote] = useState(""),
     [bookmark, setBookmark] = useState(incident.events[0]?.id || ""),
     [bookmarkNote, setBookmarkNote] = useState(""),
@@ -461,6 +463,7 @@ function CasePanel({
         <section className="panel p-5">
           <div className="label">Analyst Disposition</div>
           <select
+            disabled={!can("incidents:write")}
             aria-label="Incident disposition"
             value={incident.disposition}
             onChange={(e) =>
@@ -488,6 +491,7 @@ function CasePanel({
         <section className="panel p-5">
           <div className="label">Add Case Note</div>
           <textarea
+            disabled={!can("incidents:write")}
             aria-label="Case note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -495,7 +499,7 @@ function CasePanel({
             placeholder="Record analyst observations…"
           />
           <button
-            disabled={!note.trim()}
+            disabled={!note.trim()||!can("incidents:write")}
             className="btn btn-primary mt-3"
             onClick={() =>
               perform(
@@ -512,6 +516,7 @@ function CasePanel({
         <section className="panel p-5">
           <div className="label">Bookmark Evidence</div>
           <select
+            disabled={!can("incidents:write")}
             aria-label="Evidence event"
             value={bookmark}
             onChange={(e) => setBookmark(e.target.value)}
@@ -524,6 +529,7 @@ function CasePanel({
             ))}
           </select>
           <input
+            disabled={!can("incidents:write")}
             aria-label="Bookmark note"
             value={bookmarkNote}
             onChange={(e) => setBookmarkNote(e.target.value)}
@@ -531,6 +537,7 @@ function CasePanel({
             placeholder="Why this evidence matters"
           />
           <button
+            disabled={!can("incidents:write")}
             className="btn btn-primary mt-3"
             onClick={() =>
               perform(
@@ -741,6 +748,7 @@ function AIInvestigator({ incident }: { incident: Incident }) {
   );
 }
 export default function InvestigationPage() {
+  const {can}=useAuthorization();
   const { id } = useParams(),
     [incident, setIncident] = useState<Incident>(),
     [tab, setTab] = useState("Overview"),
@@ -768,12 +776,8 @@ export default function InvestigationPage() {
     }
   };
   const exportReport = async () => {
-    const response = await fetch(`/api/incidents/${id}/report`);
-    if (!response.ok) {
-      setError("Report export failed.");
-      return;
-    }
-    const url = URL.createObjectURL(await response.blob()),
+    const report=await apiText(`/incidents/${id}/report`);
+    const url = URL.createObjectURL(new Blob([report],{type:"text/markdown"})),
       anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = id + "-report.md";
@@ -829,10 +833,10 @@ export default function InvestigationPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button className="btn" onClick={() => update("INVESTIGATING")}>
+          <button disabled={!can("incidents:resolve")} className="btn" onClick={() => update("INVESTIGATING")}>
             Assign to Me
           </button>
-          <button className="btn" onClick={() => update("RESOLVED")}>
+          <button disabled={!can("incidents:resolve")} className="btn" onClick={() => update("RESOLVED")}>
             Resolve
           </button>
           <button className="btn flex gap-2" onClick={exportReport}>
