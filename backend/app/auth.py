@@ -10,9 +10,15 @@ from .database import get_db
 from .models import Tenant,UserAccount
 
 ROLE_LEVEL={"VIEWER":0,"ANALYST":1,"RESPONDER":2,"ADMINISTRATOR":3}
+ROLE_PERMISSIONS={
+    "VIEWER":{"incidents:read","telemetry:read","rules:read","audit:read"},
+    "ANALYST":{"incidents:read","incidents:write","incidents:resolve","telemetry:read","actions:request","rules:read","audit:read"},
+    "RESPONDER":{"incidents:read","incidents:write","incidents:resolve","telemetry:read","actions:request","actions:approve","actions:execute","rules:read","audit:read"},
+    "ADMINISTRATOR":{"incidents:read","incidents:write","incidents:resolve","telemetry:read","telemetry:ingest","actions:request","actions:approve","actions:execute","rules:read","rules:manage","users:manage","audit:read"},
+}
 @dataclass(frozen=True)
 class Principal:
-    user_id:str;tenant_id:str;email:str;role:str
+    user_id:str;tenant_id:str;email:str;role:str;permissions:frozenset[str]=frozenset()
 
 def hash_password(password,salt=None):
     salt=salt or os.urandom(16);digest=hashlib.pbkdf2_hmac("sha256",password.encode(),salt,210_000);return f"pbkdf2_sha256$210000${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
@@ -40,10 +46,22 @@ def current_principal(request:Request,db:Session=Depends(get_db)):
             claims=jwt.decode(token,signing_key,algorithms=["RS256","ES256"],audience=settings.oidc_audience,issuer=settings.oidc_issuer)
         else:
             claims=jwt.decode(token,settings.auth_secret,algorithms=["HS256"],audience=settings.oidc_audience,issuer=settings.oidc_issuer or "cirt-lens-local")
-        return Principal(claims["sub"],claims["tenant_id"],claims["email"],claims["role"])
+        namespace=settings.oidc_claim_namespace.rstrip("/")
+        tenant_id=claims.get(f"{namespace}/tenant_id") or claims.get("tenant_id")
+        roles=claims.get(f"{namespace}/roles") or ([claims["role"]] if claims.get("role") else [])
+        permissions=frozenset(claims.get("permissions",[]))
+        if not tenant_id or not roles:raise ValueError("Required tenant or role claims are missing")
+        role=max((str(role).upper() for role in roles),key=lambda value:ROLE_LEVEL.get(value,-1))
+        return Principal(claims["sub"],tenant_id,claims.get("email",claims["sub"]),role,permissions)
     except Exception as exc:raise HTTPException(401,"Invalid or expired access token") from exc
 def require_role(minimum):
     def dependency(principal:Principal=Depends(current_principal)):
         if ROLE_LEVEL.get(principal.role,-1)<ROLE_LEVEL[minimum]:raise HTTPException(403,f"{minimum} role required")
+        return principal
+    return dependency
+def require_permission(permission):
+    def dependency(principal:Principal=Depends(current_principal)):
+        granted=principal.permissions or frozenset(ROLE_PERMISSIONS.get(principal.role,set()))
+        if permission not in granted:raise HTTPException(403,f"Missing permission: {permission}")
         return principal
     return dependency
