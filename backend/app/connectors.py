@@ -54,7 +54,17 @@ class Auth0IdentityConnector(IdentityConnector):
         return ConnectorResult("SUCCEEDED",correlation_id,f"Blocked allowlisted Auth0 sandbox user {target}.")
     def status(self,provider_request_id):return ConnectorResult("SUBMITTED",provider_request_id,"Check the Auth0 tenant log using the correlation ID.")
 
+class RoutedIdentityConnector(IdentityConnector):
+    """Routes supported identity mutations to Auth0 and keeps other demo actions simulated."""
+    name="response_router"
+    def __init__(self,auth0):self.auth0=auth0;self.fake=FakeIdentityConnector()
+    def execute(self,action,subject,idempotency_key,dry_run=True):
+        if action in self.auth0.supported_actions:return self.auth0.execute(action,subject,idempotency_key,dry_run)
+        return self.fake.execute(action,subject,idempotency_key,True)
+    def status(self,provider_request_id):
+        return self.auth0.status(provider_request_id) if provider_request_id.startswith("cirt-") else self.fake.status(provider_request_id)
+
 def build_connector():
-    if settings.connector_mode.lower()=="auth0":return Auth0IdentityConnector(settings.oidc_issuer,settings.auth0_management_client_id,settings.auth0_management_client_secret,settings.auth0_allowed_target_users,settings.auth0_connector_target_user)
+    if settings.connector_mode.lower()=="auth0":return RoutedIdentityConnector(Auth0IdentityConnector(settings.oidc_issuer,settings.auth0_management_client_id,settings.auth0_management_client_secret,settings.auth0_allowed_target_users,settings.auth0_connector_target_user))
     return FakeIdentityConnector()
 connector=build_connector()

@@ -337,8 +337,14 @@ function ResponsePanel({
   notify: (message: string) => void;
 }) {
   const {can}=useAuthorization();
+  type Approval={id:string;incident_id:string;action:string;requested_by:string;approved_by?:string;status:string;created_at:string};
   const [confirm, setConfirm] = useState<RecommendedAction>(),
+    [approvals,setApprovals]=useState<Approval[]>([]),
     [error, setError] = useState("");
+  const loadApprovals=useCallback(()=>{if(can("actions:approve"))api<Approval[]>("/approvals").then(setApprovals).catch(()=>setApprovals([]))},[can]);
+  useEffect(loadApprovals,[loadApprovals]);
+  const requestApproval=async(action:string)=>{setError("");try{await api(`/incidents/${incident.id}/approvals`,{method:"POST",body:JSON.stringify({action})});notify("Approval requested from a second responder");loadApprovals()}catch(e){setError(e instanceof Error?e.message:"Approval request failed.")}};
+  const approve=async(id:string)=>{setError("");try{await api(`/approvals/${id}/approve`,{method:"POST"});notify("Response action approved");loadApprovals()}catch(e){setError(e instanceof Error?e.message:"Approval failed.")}};
   const execute = async () => {
     if (!confirm) return;
     setError("");
@@ -350,7 +356,7 @@ function ResponsePanel({
           analyst: "analyst@demo",
         }),
       });
-      notify("Simulated action executed and added to audit log");
+      notify("Response action executed and added to the audit log");
       setConfirm(undefined);
       reload();
     } catch (e) {
@@ -379,7 +385,9 @@ function ResponsePanel({
       {error && <div className="mb-3 text-xs text-red-300">{error}</div>}
       <div className="panel overflow-hidden">
         <div className="p-4 label">Recommended Actions</div>
-        {incident.recommended_actions.map((action) => (
+        {incident.recommended_actions.map((action) => {
+          const highImpact=action.reduction_points>=12,approval=approvals.find(item=>item.incident_id===incident.id&&item.action===action.action&&item.status==="APPROVED");
+          return (
           <div
             key={action.action}
             className="grid-table grid-cols-[1.3fr_2fr_120px_120px_100px] px-4 text-xs"
@@ -396,23 +404,18 @@ function ResponsePanel({
             >
               {action.status}
             </span>
-            <button
-              disabled={action.status === "EXECUTED"||!can("actions:execute")}
-              onClick={() => setConfirm(action)}
-              className="btn"
-            >
-              {action.status === "EXECUTED" ? "Executed" : "Execute"}
-            </button>
+            {highImpact&&!approval&&can("actions:request")?<button disabled={action.status==="EXECUTED"} onClick={()=>requestApproval(action.action)} className="btn">Request approval</button>:<button disabled={action.status === "EXECUTED"||!can("actions:execute")} onClick={() => setConfirm(action)} className="btn">{action.status === "EXECUTED" ? "Executed" : "Execute"}</button>}
           </div>
-        ))}
+        )})}
       </div>
+      {can("actions:approve")&&approvals.some(item=>item.status==="PENDING")&&<div className="panel mt-4 p-4"><div className="label mb-3">Pending two-person approvals</div>{approvals.filter(item=>item.status==="PENDING").map(item=><div key={item.id} className="flex items-center justify-between border-t border-[#294052] py-3 text-xs"><span><b>{item.action}</b> · {item.incident_id}</span><button className="btn" onClick={()=>approve(item.id)}>Approve</button></div>)}</div>}
       {confirm && (
         <div className="fixed inset-0 z-50 bg-black/70 grid place-items-center">
           <div className="panel p-6 w-[420px]">
-            <h3 className="font-bold">Confirm simulated action</h3>
+            <h3 className="font-bold">Confirm response action</h3>
             <p className="text-sm muted mt-3">
               Execute <b className="text-slate-200">{confirm.action}</b>? This
-              records an auditable simulation only.
+              uses the configured connector and records an auditable result.
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button className="btn" onClick={() => setConfirm(undefined)}>
