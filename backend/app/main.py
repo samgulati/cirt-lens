@@ -39,6 +39,14 @@ app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173","http:/
 configure_logging();logger=logging.getLogger("cirt_lens")
 
 def utcnow(): return datetime.now(UTC).replace(tzinfo=None)
+def dependency_error_category(exc:Exception):
+    message=str(exc).lower()
+    if "certificate_verify_failed" in message:return "tls_certificate"
+    if "authentication" in message or "invalid username-password" in message:return "authentication"
+    if "name or service not known" in message or "nodename nor servname" in message:return "dns"
+    if "timed out" in message or "timeout" in message:return "timeout"
+    if "connection refused" in message:return "connection_refused"
+    return exc.__class__.__name__
 def problem(status,title,detail,request_id=None): return {"error":{"status":status,"title":title,"detail":detail,"request_id":request_id}}
 @app.middleware("http")
 async def request_context(request:Request,call_next):
@@ -76,8 +84,11 @@ def ready(db:Session=Depends(get_db)):
     try:
         from redis import Redis
         Redis.from_url(settings.redis_url).ping();dependencies["redis"]="reachable"
-    except Exception:dependencies["redis"]="unavailable"
-    if settings.auth_required and dependencies["redis"]!="reachable":raise HTTPException(503,"Required dependency unavailable")
+    except Exception as exc:
+        scheme=settings.redis_url.split(":",1)[0] if ":" in settings.redis_url else "missing"
+        category=dependency_error_category(exc);dependencies["redis"]="unavailable";dependencies["redis_scheme"]=scheme;dependencies["redis_error"]=category
+        logger.warning("redis_readiness_failed",extra={"dependency":"redis","error_category":category,"url_scheme":scheme})
+    if settings.auth_required and dependencies["redis"]!="reachable":raise HTTPException(503,f"Required dependency unavailable: redis ({dependencies.get('redis_scheme')}/{dependencies.get('redis_error')})")
     return {"status":"ready","dependencies":dependencies}
 
 @app.get("/api/dashboard",dependencies=[Depends(require_permission("incidents:read"))])
