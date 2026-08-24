@@ -7,7 +7,9 @@
 ```mermaid
 flowchart TD
   R[Synthetic raw telemetry] --> V[Pydantic source validation]
-  V --> D[Detection engine]
+  V --> J[PostgreSQL idempotent job]
+  J --> RS[Redis Stream]
+  RS --> D[Background detection worker]
   D --> F[Event findings and event risk]
   F --> C[Entity/time correlation]
   C --> I[Incident classification]
@@ -16,7 +18,8 @@ flowchart TD
   A --> P[Detection-driven playbook]
   P --> UI[Investigation UI]
   UI --> AI[Grounded AI investigator]
-  UI --> SOAR[Simulated response]
+  UI --> SOAR[Approval-gated connector response]
+  OIDC[Auth0 OIDC + tenant RBAC] --> UI
   AI --> AU[Audit trail]
   SOAR --> AU
 ```
@@ -41,7 +44,7 @@ Mappings consume derived findings. Each technique retains only the event IDs res
 
 ## Response execution
 
-The API validates that an action belongs to the incident and rejects repeat execution with HTTP 409. Actions are simulations and append an audit entry. Original risk is immutable; residual risk subtracts documented demonstration reductions. Only high-impact containment actions can automatically mark a case contained. Collection and escalation actions do not.
+The API validates that an action and incident belong to the caller's tenant and rejects repeat execution with HTTP 409. High-impact actions require a different approver; the approval expires and is atomically consumed with a successful connector transaction. Connectors preserve idempotency and provider request IDs. Most actions are dry-run simulations; only an allowlisted Auth0 development-tenant account can be disabled live. Original risk is immutable; residual risk subtracts documented demonstration reductions. Only high-impact containment actions can automatically mark a case contained.
 
 ## AI grounding
 
@@ -49,15 +52,15 @@ Only serialized incident metadata, correlated evidence, risk, techniques, and ac
 
 ## Database design
 
-SQLite stores normalized events, incidents, and append-only application activity. Source detail and detection reasons remain in event JSON while commonly searched entities are indexed columns. A small compatibility shim adds new incident fields for existing local databases. During development, deleting `backend/cirt_lens.db` safely regenerates synthetic data.
+PostgreSQL is the public/Docker operational store for normalized events, incidents, findings, rule versions, jobs, approvals, connector executions, risk history, and append-only-style activity. Tenant and time indexes support bounded queries; Alembic owns forward and rollback migrations. SQLite with the same ORM schema is retained only for fast isolated tests and optional zero-dependency development.
 
 ## Scaling considerations
 
-Production ingestion would place Kafka or a managed stream before validation, use partitioned workers for detection, and persist telemetry in PostgreSQL/OpenSearch or a security data lake. Correlation state would be windowed and partitioned by entity keys. A durable queue would separate detection, correlation, and response. This demo intentionally does not implement those systems.
+Redis Streams provides at-least-once asynchronous ingestion, retry accounting, processing visibility, and dead-letter handling. Idempotency is enforced at tenant/job and event boundaries. A larger production deployment could replace Redis with partitioned Kafka and move long-retention telemetry to OpenSearch or a security data lake; the current bounded PostgreSQL/Redis topology is intentionally simpler.
 
 ## Security considerations
 
-Telemetry is validated, query sizes are capped, ORM parameters are used, secrets remain backend-only, and React escapes telemetry. The product executes no telemetry commands, performs no scans, and invokes no infrastructure. Real SOAR would require scoped service identities, approvals, idempotency keys, rollback, rate limits, and blast-radius controls.
+Telemetry is validated, query sizes are capped, ORM parameters are used, secrets remain backend-only, and React escapes telemetry. Auth0 tokens are cryptographically verified and every protected resource is tenant-scoped. The product executes no telemetry commands or scans. The only live mutation is restricted to an allowlisted Auth0 development identity with scoped credentials, approval, idempotency, retries, circuit breaking, and auditability.
 
 ## Tradeoffs
 

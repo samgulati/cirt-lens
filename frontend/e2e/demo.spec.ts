@@ -1,62 +1,121 @@
-import {test,expect} from '@playwright/test';
-test('hiring manager credential-compromise workflow',async({page})=>{
-  const consoleErrors:string[]=[];page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text())});
+import { test, expect } from '@playwright/test';
+test('hiring manager credential-compromise workflow', async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
   await page.goto('/');
-  await page.getByRole('button',{name:/Generate Demo Incident/i}).click();
-  await page.getByRole('button',{name:/^Credential Compromise MFA/i}).click();
-  const generated=page.waitForResponse(response=>response.url().includes('/api/demo/generate'));
-  await page.getByRole('button',{name:'Generate Incident'}).click();
-  const generatedResponse=await generated;
-  expect(generatedResponse.ok(),`generate returned ${generatedResponse.status()}: ${await generatedResponse.text()}`).toBeTruthy();
+  await page.getByRole('button', { name: /Generate Demo Incident/i }).click();
+  await page.getByRole('button', { name: /^Credential Compromise MFA/i }).click();
+  const generated = page.waitForResponse((response) =>
+    response.url().includes('/api/demo/generate'),
+  );
+  await page.getByRole('button', { name: 'Generate Incident' }).click();
+  const generatedResponse = await generated;
+  expect(
+    generatedResponse.ok(),
+    `generate returned ${generatedResponse.status()}: ${await generatedResponse.text()}`,
+  ).toBeTruthy();
   await expect(page).toHaveURL(/\/incidents\/INC-/);
   await expect(page.getByText(/CRITICAL|HIGH/).first()).toBeVisible();
-  await page.getByRole('button',{name:'Timeline'}).click();
+  await page.getByRole('button', { name: 'Timeline' }).click();
   await expect(page.getByText(/authentication/i).first()).toBeVisible();
-  await page.getByRole('button',{name:'Evidence'}).click();
+  await page.getByRole('button', { name: 'Evidence' }).click();
   await expect(page.getByText(/AUTH-/).first()).toBeVisible();
-  await page.getByRole('button',{name:'Attack Mapping'}).click();
+  await page.getByRole('button', { name: 'Attack Mapping' }).click();
   await expect(page.getByText('T1078')).toBeVisible();
-  await page.getByRole('button',{name:'AI Investigator'}).click();
-  await page.getByRole('button',{name:'What probably happened?'}).click();
+  await page.getByRole('button', { name: 'AI Investigator' }).click();
+  await page.getByRole('button', { name: 'What probably happened?' }).click();
   await expect(page.getByText(/Likely credential compromise/i)).toBeVisible();
-  await page.getByRole('button',{name:'Response'}).click();
-  await page.locator('.grid-table').filter({hasText:'Force password reset'}).getByRole('button',{name:'Execute',exact:true}).click();
-  await page.getByRole('button',{name:'Confirm Execute'}).click();
+  await page.getByRole('button', { name: 'Response' }).click();
+  await page
+    .locator('.grid-table')
+    .filter({ hasText: 'Force password reset' })
+    .getByRole('button', { name: 'Execute', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Confirm Execute' }).click();
   await expect(page.getByText(/Residual Risk/i)).toBeVisible();
-  await page.getByRole('button',{name:'Case'}).click();
+  await page.getByRole('button', { name: 'Case' }).click();
   await page.getByLabel('Incident disposition').selectOption('TRUE_POSITIVE');
   await page.getByLabel('Case note').fill('Confirmed synthetic identity-compromise chain.');
-  await page.getByRole('button',{name:'Add Note'}).click();
-  await expect(page.locator('section').filter({hasText:'Case Notes'}).getByText('Confirmed synthetic identity-compromise chain.').last()).toBeVisible();
-  const authOption=page.getByLabel('Evidence event').locator('option').filter({hasText:/AUTH-/}).first();
-  await page.getByLabel('Evidence event').selectOption(await authOption.getAttribute('value')||'');
+  await page.getByRole('button', { name: 'Add Note' }).click();
+  await expect(
+    page
+      .locator('section')
+      .filter({ hasText: 'Case Notes' })
+      .getByText('Confirmed synthetic identity-compromise chain.')
+      .last(),
+  ).toBeVisible();
+  const authOption = page
+    .getByLabel('Evidence event')
+    .locator('option')
+    .filter({ hasText: /AUTH-/ })
+    .first();
+  await page
+    .getByLabel('Evidence event')
+    .selectOption((await authOption.getAttribute('value')) || '');
   await page.getByLabel('Bookmark note').fill('Primary authentication evidence');
-  await page.getByRole('button',{name:'Bookmark'}).click();
-  await expect(page.locator('section').filter({hasText:'Bookmarked Evidence'}).getByText(/AUTH-/).first()).toBeVisible();
-  await page.getByRole('link',{name:'Activity'}).click();
+  await page.getByRole('button', { name: 'Bookmark' }).click();
+  await expect(
+    page.locator('section').filter({ hasText: 'Bookmarked Evidence' }).getByText(/AUTH-/).first(),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Activity' }).click();
   await expect(page.getByText('FORCE_PASSWORD_RESET').first()).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
 
-test('endpoint compromise evidence and containment workflow',async({page})=>{
-  const consoleErrors:string[]=[];page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text())});
+test('mobile operator navigation and request-ID failure recovery', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/telemetry/jobs', async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      headers: { 'x-request-id': 'e2e-operations-request' },
+      body: JSON.stringify({
+        error: { detail: 'Ingestion dependency unavailable', request_id: 'e2e-operations-request' },
+      }),
+    });
+  });
   await page.goto('/');
-  await page.getByRole('button',{name:/Generate Demo Incident/i}).click();
-  await page.getByRole('button',{name:/^Endpoint Compromise/i}).click();
-  const generated=page.waitForResponse(response=>response.url().includes('/api/demo/generate'));
-  await page.getByRole('button',{name:'Generate Incident'}).click();
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await expect(page.getByRole('link', { name: 'Operations' })).toBeVisible();
+  await page.getByRole('link', { name: 'Operations' }).click();
+  await expect(page.getByText(/Ingestion dependency unavailable/)).toBeVisible();
+  await expect(page.getByText(/e2e-operations-request/)).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth,
+  );
+  expect(overflow).toBeFalsy();
+});
+
+test('endpoint compromise evidence and containment workflow', async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Generate Demo Incident/i }).click();
+  await page.getByRole('button', { name: /^Endpoint Compromise/i }).click();
+  const generated = page.waitForResponse((response) =>
+    response.url().includes('/api/demo/generate'),
+  );
+  await page.getByRole('button', { name: 'Generate Incident' }).click();
   expect((await generated).ok()).toBeTruthy();
   await expect(page).toHaveURL(/\/incidents\/INC-/);
-  await page.getByRole('button',{name:'Evidence'}).click();
+  await page.getByRole('button', { name: 'Evidence' }).click();
   await expect(page.getByText(/ENDP-/).first()).toBeVisible();
-  await page.getByRole('button',{name:'Attack Mapping'}).click();
+  await page.getByRole('button', { name: 'Attack Mapping' }).click();
   await expect(page.getByText('T1059.001')).toBeVisible();
   await expect(page.getByText('T1003')).toBeVisible();
-  await page.getByRole('button',{name:'Response'}).click();
-  await page.locator('.grid-table').filter({hasText:'Kill suspicious process'}).getByRole('button',{name:'Execute',exact:true}).click();
-  await page.getByRole('button',{name:'Confirm Execute'}).click();
+  await page.getByRole('button', { name: 'Response' }).click();
+  await page
+    .locator('.grid-table')
+    .filter({ hasText: 'Kill suspicious process' })
+    .getByRole('button', { name: 'Execute', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Confirm Execute' }).click();
   await expect(page.getByText('Executed').first()).toBeVisible();
-  await page.getByRole('link',{name:'Activity'}).click();
+  await page.getByRole('link', { name: 'Activity' }).click();
   await expect(page.getByText('KILL_SUSPICIOUS_PROCESS').first()).toBeVisible();
   expect(consoleErrors).toEqual([]);
 });
