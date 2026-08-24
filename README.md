@@ -3,6 +3,8 @@
 [![CI](https://github.com/samgulati/cirt-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/samgulati/cirt-lens/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/samgulati/cirt-lens?display_name=tag)](https://github.com/samgulati/cirt-lens/releases)
 
+Public staging: **[cirt-lens.onrender.com](https://cirt-lens.onrender.com)**
+
 ## Engineering-hardening highlights
 
 - Incremental ingestion queries bounded historical context, so later events can detect and enrich an existing incident across requests.
@@ -16,8 +18,11 @@
 - PostgreSQL is the operational store; Redis Streams and a separate worker provide asynchronous, idempotent ingestion with retry and dead-letter handling.
 - Signed local JWT authentication, cryptographically verified OIDC JWT support, tenant scoping, four RBAC roles, and two-person approval protect high-impact actions.
 - OpenTelemetry instrumentation, Prometheus, a provisioned Grafana dashboard, structured logs, dependency readiness, an evaluation dataset, and CI/release pipelines make the system operable.
+- A tenant-scoped operator control plane exposes two-person approvals, ingestion jobs and DLQ health, connector execution history, and provider reconciliation without exposing telemetry payloads.
+- High-impact approvals expire after 30 minutes and are atomically consumed on execution; Auth0 calls have classified retries, backoff, circuit breaking, allowlisting, dry-run, stable idempotency, and reconciliation.
+- Release images are vulnerability-scanned, keyless-signed, accompanied by an SPDX SBOM, and linked to GitHub build-provenance attestations; third-party Actions are pinned to immutable SHAs.
 - The React frontend is split into lazy-loaded route pages, shared layout/common components, and investigation components; the initial production chunk is 245 KB (78.9 KB gzip).
-- Two Playwright interview workflows cover credential and endpoint compromise, including case work, AI grounding, ATT&CK evidence, response simulation, and audit verification with a clean browser console.
+- Three Playwright workflows cover credential and endpoint compromise plus mobile operator failure recovery, including case work, AI grounding, ATT&CK evidence, response simulation, request-ID supportability, and audit verification with a clean browser console.
 - See the [security model](docs/security-model.md) and [performance notes](docs/performance.md).
 
 For native backend startup, run migrations first:
@@ -42,7 +47,9 @@ CIRT Lens turns multi-source telemetry into coherent investigations and gives an
 ```mermaid
 flowchart TD
   A[Synthetic Raw Telemetry] --> B[Pydantic Validation]
-  B --> C[Detection Engine]
+  B --> Q[PostgreSQL Ingestion Job]
+  Q --> R[Redis Stream]
+  R --> C[Background Detection Worker]
   C --> D[Event Findings + Risk]
   D --> E[Correlation Engine]
   E --> F[Incident Classification]
@@ -52,6 +59,9 @@ flowchart TD
   I --> J[Investigation UI]
   J --> K[AI Investigator]
   J --> L[Response Simulation]
+  N[Auth0 OIDC + Tenant RBAC] --> J
+  L --> O[Two-person Approval]
+  O --> P[Allowlisted Connector + Reconciliation]
   K --> M[Audit Trail]
   L --> M
 ```
@@ -71,6 +81,8 @@ The React/Vite frontend talks to a FastAPI API backed by PostgreSQL. Redis Strea
 - Immutable original risk with deterministic residual-risk reduction
 - Downloadable Markdown incident reports
 - Loading, error-safe empty states, confirmations, filters, and responsive charts
+- Operator control plane for approval inbox, queue/DLQ health, job visibility, connector history, and reconciliation
+- Request-ID-aware failure messages, keyboard focus treatment, skip navigation, responsive mobile navigation, and role-aware controls
 
 ## Detection Logic
 
@@ -144,9 +156,24 @@ cd backend
 pytest
 ```
 
-The 57-test backend suite covers positive and negative detection boundaries, tenant isolation, RBAC, unauthorized action denial, two-person approval, ingestion idempotency, rule lifecycle/replay, cross-batch enrichment, rollback, hostile-string safety, correlation cohesion, scoring, grounded AI output, and Alembic upgrades.
+The 62-test backend suite covers positive and negative detection boundaries, a cross-resource tenant isolation matrix, RBAC, unauthorized action denial, approval expiry/consumption, connector retries/circuit breaking/reconciliation, ingestion idempotency, rule lifecycle/replay, cross-batch enrichment, rollback, hostile-string safety, correlation cohesion, scoring, grounded AI output, and Alembic upgrades. Four Vitest component tests cover role-derived controls and request-ID/network failure contracts.
 
-From `backend`, run `PYTHONPATH=. python evaluation/run_evaluation.py` for the 36-case labeled quality gate. It includes malicious chains, benign traffic, and near-threshold negative cases and enforces minimum precision, recall, classification, correlation, and grounding scores. Run `PYTHONPATH=. python benchmarks/benchmark_pipeline.py` and `PYTHONPATH=. python benchmarks/correlation_benchmark.py` for deterministic 10,000-event pipeline and 5,080-event correlation guardrails. These synthetic measurements demonstrate regression resistance; they are not claims about real-world detection efficacy or production capacity. Run `npm run test:e2e` in `frontend` for the two Playwright interview workflows.
+From `backend`, run `PYTHONPATH=. python evaluation/run_evaluation.py` for the 360-case labeled quality gate: 120 malicious chains and 240 benign/near-threshold negatives, reported across train/development/test partitions and with every third case delivered out of order. It enforces minimum precision, recall, classification, correlation, and grounding scores. Run `PYTHONPATH=. python benchmarks/benchmark_pipeline.py` and `PYTHONPATH=. python benchmarks/correlation_benchmark.py` for deterministic 10,000-event pipeline and 5,080-event correlation guardrails. Run the [end-to-end load profile](load-tests/README.md) to measure the HTTP, PostgreSQL, Redis Streams, and worker path. These synthetic measurements demonstrate regression resistance; they are not claims about real-world detection efficacy or production capacity. Run `npm test` and `npm run test:e2e` in `frontend` for component and Playwright workflows.
+
+## Verified engineering evidence
+
+The following was reproduced locally on 24 August 2026; hardware and environment materially affect performance:
+
+| Evidence | Result |
+| --- | --- |
+| Backend suite | 62 passed |
+| Frontend component suite | 4 passed |
+| Labeled evaluation | 360/360 cases; 1.00 synthetic precision and recall |
+| Pipeline guardrail | 10,000 validated/detected events in 44.11 ms (in-process) |
+| Correlation guardrail | 5,080 events in 27.64 ms; candidate pruning reduced comparisons 99.9991% |
+| End-to-end Docker profile | 1,000 events; 100/100 jobs completed; 0 errors; p95 ingest latency 119.19 ms; 556.81 processed events/s |
+
+See [operational evidence](docs/operations-evidence.md), [performance methodology](docs/performance.md), and [release/rollback](docs/release-and-rollback.md) for scope and reproduction commands.
 
 ## Two-Minute Demo
 
@@ -167,9 +194,9 @@ From `backend`, run `PYTHONPATH=. python evaluation/run_evaluation.py` for the 3
 - Most SOAR actions use a deterministic fake connector. Only the allowlisted Auth0 development-tenant `Disable account` action can use the live sandbox connector, and it remains approval-gated.
 - ATT&CK mappings are intentionally simplified demonstration mappings, not authoritative classifications.
 
-## External production steps
+## Public environment
 
-The remaining environment-owned work is to connect a real OIDC tenant, replace the fake response connector with a vendor sandbox, and deploy the supplied containers/manifests behind public DNS and TLS. Those steps require credentials and infrastructure that are deliberately not committed to this repository.
+The staging deployment uses TLS, Auth0 OIDC, four role-specific demo identities, PostgreSQL, Redis-backed asynchronous ingestion, and an allowlisted Auth0 development-tenant Management API connector. Most response actions deliberately remain deterministic dry-runs; only account disablement can reach the isolated Auth0 sandbox target. Credentials and tenant configuration are environment-owned and never committed.
 
 ## Engineering Documentation
 
@@ -177,6 +204,8 @@ The remaining environment-owned work is to connect a real OIDC tenant, replace t
 - [Security model](docs/security-model.md)
 - [Production platform](docs/production-platform.md)
 - [Performance notes](docs/performance.md)
+- [Operational evidence and runbooks](docs/operations-evidence.md)
+- [Release and rollback](docs/release-and-rollback.md)
 
 Schema changes are managed through Alembic. Existing local and Docker databases should be upgraded with `alembic upgrade head`; deleting the database is only appropriate when the user explicitly wants a fresh synthetic environment.
 

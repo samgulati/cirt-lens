@@ -1,12 +1,15 @@
 from datetime import datetime
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
 
 class RawEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(min_length=3, max_length=80)
     timestamp: datetime
     schema_version: Literal["1.0"] = "1.0"
+
 
 class AuthenticationEventInput(RawEvent):
     telemetry_type: Literal["authentication"] = "authentication"
@@ -19,6 +22,7 @@ class AuthenticationEventInput(RawEvent):
     mfa_result: Literal["APPROVED", "DENIED", "NOT_REQUIRED"]
     authentication_method: str
 
+
 class EndpointEventInput(RawEvent):
     telemetry_type: Literal["endpoint"] = "endpoint"
     hostname: str
@@ -29,6 +33,7 @@ class EndpointEventInput(RawEvent):
     process_hash: str
     event_type: str
     destination_ip: str | None = None
+
 
 class NetworkEventInput(RawEvent):
     telemetry_type: Literal["network"] = "network"
@@ -43,6 +48,7 @@ class NetworkEventInput(RawEvent):
     user: str | None = None
     hostname: str | None = None
 
+
 class CloudEventInput(RawEvent):
     telemetry_type: Literal["cloud"] = "cloud"
     user: str
@@ -55,7 +61,9 @@ class CloudEventInput(RawEvent):
     sensitive_resource: bool = False
     device_id: str | None = None
 
+
 TelemetryInput = AuthenticationEventInput | EndpointEventInput | NetworkEventInput | CloudEventInput
+
 
 class DetectionFinding(BaseModel):
     event_id: str

@@ -1,15 +1,179 @@
-import type {ReactNode} from 'react';
-import {AlertTriangle,Cloud,HardDrive,Network,User} from 'lucide-react';
-import type {Incident,SecurityEvent} from '../types';
-export const fmt=(value:string)=>new Date(value).toLocaleString([],{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-export function SeverityBadge({severity}:{severity:string}){return <span className={'sev '+severity}>{severity}</span>}
-export function SourceIcon({source}:{source:string}){return source==='Identity'?<User size={15}/>:source==='Endpoint'?<HardDrive size={15}/>:source==='Network'?<Network size={15}/>:<Cloud size={15}/>}
-export function PageTitle({eyebrow,title,sub}:{eyebrow:string,title:string,sub:string}){return <div className="mb-5"><div className="label text-cyan-500">{eyebrow}</div><h1 className="text-2xl font-bold mt-1">{title}</h1><p className="text-sm muted mt-1">{sub}</p></div>}
-export function Panel({title,children}:{title:string,children:ReactNode}){return <div className="panel p-4"><div className="text-sm font-semibold mb-3">{title}</div>{children}</div>}
-export function Loading(){return <div className="h-64 grid place-items-center muted"><div className="animate-pulse">Loading security data…</div></div>}
-export function ErrorPanel({message,retry}:{message:string,retry:()=>void}){return <div className="panel p-8 text-center border-red-900"><AlertTriangle className="mx-auto text-red-400"/><h2 className="font-bold mt-3">Unable to load security data</h2><p className="text-sm muted mt-2">{message}</p><button className="btn mt-4" onClick={retry}>Retry</button></div>}
-export function EmptyState({message}:{message:string}){return <div className="panel p-12 text-center muted">{message}</div>}
-export function Metric({name,value,color=''}:{name:string,value:ReactNode,color?:string}){return <div className="panel p-3"><div className="label">{name}</div><div className={'text-xl font-bold mt-1 '+color}>{value}</div></div>}
-export function Scope({name,value}:{name:string,value:ReactNode}){return <div><div className="label">{name}</div><div className="mt-1 break-all">{value}</div></div>}
-export function EventRows({events,expanded,setExpanded}:{events:SecurityEvent[],expanded:string,setExpanded:(id:string)=>void}){return <>{events.map(event=><div key={event.id}><button onClick={()=>setExpanded(expanded===event.id?'':event.id)} className="grid-table grid-cols-[130px_90px_1fr_1fr_90px] px-4 w-full text-left text-xs hover:bg-cyan-500/5"><span>{fmt(event.timestamp)}</span><span className="flex gap-2"><SourceIcon source={event.source}/>{event.source}</span><span><b>{event.activity}</b><small className="block font-mono muted mt-1">{event.id}</small></span><span>{event.risk_flags.map(flag=><i key={flag} className="not-italic text-[9px] text-amber-300 mr-1">{flag}</i>)}</span><b className={event.risk_score>24?'text-red-400':'muted'}>{event.risk_score}</b></button>{expanded===event.id&&<pre className="p-4 m-3 bg-black/30 text-[11px] overflow-auto">{JSON.stringify(event.raw,null,2)}</pre>}</div>)}</>}
-export function IncidentTable({items,onOpen}:{items:Incident[],onOpen:(id:string)=>void}){return <div className="panel mt-4 overflow-hidden"><div className="p-4 font-semibold">Recent Incidents</div><div className="grid-table grid-cols-[100px_1.8fr_1.2fr_1.1fr_1fr_110px] px-4 label bg-[#0b1924]"><span>Severity</span><span>Incident</span><span>Primary User</span><span>Primary Host</span><span>Detected</span><span>Status</span></div>{items.map(item=><button key={item.id} onClick={()=>onOpen(item.id)} className="grid-table grid-cols-[100px_1.8fr_1.2fr_1.1fr_1fr_110px] px-4 w-full text-left hover:bg-cyan-400/5 text-xs"><SeverityBadge severity={item.severity}/><span><b className="text-slate-200">{item.title}</b><br/><span className="muted">{item.id}</span></span><span>{item.primary_user||'—'}</span><span>{item.primary_host||'—'}</span><span>{fmt(item.created_at)}</span><span className="text-cyan-300">{item.status}</span></button>)}</div>}
+import type { ReactNode } from 'react';
+import { AlertTriangle, Cloud, HardDrive, Network, User } from 'lucide-react';
+import type { Incident, SecurityEvent } from '../types';
+export const fmt = (value: string) =>
+  new Date(value).toLocaleString([], {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+export function SeverityBadge({ severity }: { severity: string }) {
+  return <span className={'sev ' + severity}>{severity}</span>;
+}
+export function SourceIcon({ source }: { source: string }) {
+  return source === 'Identity' ? (
+    <User size={15} />
+  ) : source === 'Endpoint' ? (
+    <HardDrive size={15} />
+  ) : source === 'Network' ? (
+    <Network size={15} />
+  ) : (
+    <Cloud size={15} />
+  );
+}
+export function PageTitle({
+  eyebrow,
+  title,
+  sub,
+}: {
+  eyebrow: string;
+  title: string;
+  sub: string;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="label text-cyan-500">{eyebrow}</div>
+      <h1 className="text-2xl font-bold mt-1">{title}</h1>
+      <p className="text-sm muted mt-1">{sub}</p>
+    </div>
+  );
+}
+export function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="panel p-4">
+      <div className="text-sm font-semibold mb-3">{title}</div>
+      {children}
+    </div>
+  );
+}
+export function Loading() {
+  return (
+    <div className="h-64 grid place-items-center muted">
+      <div className="animate-pulse">Loading security data…</div>
+    </div>
+  );
+}
+export function ErrorPanel({ message, retry }: { message: string; retry: () => void }) {
+  return (
+    <div className="panel p-8 text-center border-red-900">
+      <AlertTriangle className="mx-auto text-red-400" />
+      <h2 className="font-bold mt-3">Unable to load security data</h2>
+      <p className="text-sm muted mt-2">{message}</p>
+      <button className="btn mt-4" onClick={retry}>
+        Retry
+      </button>
+    </div>
+  );
+}
+export function EmptyState({ message }: { message: string }) {
+  return <div className="panel p-12 text-center muted">{message}</div>;
+}
+export function Metric({
+  name,
+  value,
+  color = '',
+}: {
+  name: string;
+  value: ReactNode;
+  color?: string;
+}) {
+  return (
+    <div className="panel p-3">
+      <div className="label">{name}</div>
+      <div className={'text-xl font-bold mt-1 ' + color}>{value}</div>
+    </div>
+  );
+}
+export function Scope({ name, value }: { name: string; value: ReactNode }) {
+  return (
+    <div>
+      <div className="label">{name}</div>
+      <div className="mt-1 break-all">{value}</div>
+    </div>
+  );
+}
+export function EventRows({
+  events,
+  expanded,
+  setExpanded,
+}: {
+  events: SecurityEvent[];
+  expanded: string;
+  setExpanded: (id: string) => void;
+}) {
+  return (
+    <>
+      {events.map((event) => (
+        <div key={event.id}>
+          <button
+            onClick={() => setExpanded(expanded === event.id ? '' : event.id)}
+            className="grid-table grid-cols-[130px_90px_1fr_1fr_90px] px-4 w-full text-left text-xs hover:bg-cyan-500/5"
+          >
+            <span>{fmt(event.timestamp)}</span>
+            <span className="flex gap-2">
+              <SourceIcon source={event.source} />
+              {event.source}
+            </span>
+            <span>
+              <b>{event.activity}</b>
+              <small className="block font-mono muted mt-1">{event.id}</small>
+            </span>
+            <span>
+              {event.risk_flags.map((flag) => (
+                <i key={flag} className="not-italic text-[9px] text-amber-300 mr-1">
+                  {flag}
+                </i>
+              ))}
+            </span>
+            <b className={event.risk_score > 24 ? 'text-red-400' : 'muted'}>{event.risk_score}</b>
+          </button>
+          {expanded === event.id && (
+            <pre className="p-4 m-3 bg-black/30 text-[11px] overflow-auto">
+              {JSON.stringify(event.raw, null, 2)}
+            </pre>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+export function IncidentTable({
+  items,
+  onOpen,
+}: {
+  items: Incident[];
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div className="panel mt-4 overflow-hidden">
+      <div className="p-4 font-semibold">Recent Incidents</div>
+      <div className="grid-table grid-cols-[100px_1.8fr_1.2fr_1.1fr_1fr_110px] px-4 label bg-[#0b1924]">
+        <span>Severity</span>
+        <span>Incident</span>
+        <span>Primary User</span>
+        <span>Primary Host</span>
+        <span>Detected</span>
+        <span>Status</span>
+      </div>
+      {items.map((item) => (
+        <button
+          key={item.id}
+          onClick={() => onOpen(item.id)}
+          className="grid-table grid-cols-[100px_1.8fr_1.2fr_1.1fr_1fr_110px] px-4 w-full text-left hover:bg-cyan-400/5 text-xs"
+        >
+          <SeverityBadge severity={item.severity} />
+          <span>
+            <b className="text-slate-200">{item.title}</b>
+            <br />
+            <span className="muted">{item.id}</span>
+          </span>
+          <span>{item.primary_user || '—'}</span>
+          <span>{item.primary_host || '—'}</span>
+          <span>{fmt(item.created_at)}</span>
+          <span className="text-cyan-300">{item.status}</span>
+        </button>
+      ))}
+    </div>
+  );
+}

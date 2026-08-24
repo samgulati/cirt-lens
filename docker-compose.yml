@@ -27,6 +27,7 @@ services:
       DATABASE_URL: postgresql+psycopg://cirt:${POSTGRES_PASSWORD:-cirt_local_password}@postgres:5432/cirt_lens
       REDIS_URL: redis://redis:6379/0
       AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
+      APPROVAL_TTL_MINUTES: ${APPROVAL_TTL_MINUTES:-30}
       AUTH_MODE: ${AUTH_MODE:-local}
       AUTH_SECRET: ${AUTH_SECRET:-local-demo-secret-change-in-production}
       OIDC_ISSUER: ${OIDC_ISSUER:-}

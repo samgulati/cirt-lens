@@ -3,25 +3,25 @@
 ## Implemented locally
 
 - Local PBKDF2-backed identities and signed JWT sessions; OIDC mode verifies issuer, audience, expiry, algorithm, and signatures through a configured JWKS URL.
-- Tenant IDs and enforced query boundaries on identities, events, incidents, approvals, connector executions, search, reports, and audit activity.
+- Tenant IDs and enforced query boundaries on identities, events, incidents, approvals, ingestion jobs, rule versions, connector executions, search, reports, and audit activity.
 - Viewer, analyst, responder, and administrator role hierarchy enforced by API dependencies.
-- Two-person authorization for high-impact response actions when `AUTH_REQUIRED=true`.
+- Time-bound, single-use two-person authorization for high-impact response actions when `AUTH_REQUIRED=true`.
 - Redis Streams ingestion with durable job status, tenant-scoped idempotency keys, retry accounting, consumer acknowledgements, and a dead-letter stream.
 - PostgreSQL operational storage, tenant/timestamp indexes, cursor pagination, dry-run-first retention tooling, and Alembic migrations.
 - Versioned detection-rule catalog with draft, testing, active, and retired states plus non-mutating historical replay.
-- Replaceable response connector contract and deterministic fake identity connector preserving idempotency/provider request IDs.
+- Replaceable response connector contract, deterministic fake identity connector, and allowlisted Auth0 development-tenant connector with dry-run, classified retry/backoff, circuit breaking, idempotency/provider request IDs, history, and reconciliation.
 - OpenTelemetry request traces, Prometheus metrics, Grafana provisioning, structured request logs, request/incident IDs, and database/Redis readiness.
-- A 36-case deterministic labeled evaluation corpus with malicious, benign, and near-threshold cases; CI-enforced precision, recall, classification/correlation, and AI evidence-grounding thresholds.
+- A 360-case deterministic labeled evaluation corpus with 120 malicious and 240 benign/near-threshold cases, train/development/test reporting, and reversed delivery-order coverage; CI-enforced precision, recall, classification/correlation, and AI evidence-grounding thresholds.
 - Reproducible 10,000-event pipeline and 5,080-event correlation guardrails with candidate-pair reduction and expected-group checks.
-- CI for migrations, backend tests, evaluation and scale guardrails, frontend build, Playwright, dependency audit, image build, and Trivy scanning. Tagged releases publish a versioned GHCR image.
+- CI for formatting, linting, targeted static typing, migrations, 62 backend tests, evaluation and scale guardrails, frontend component/build/Playwright tests, dependency and secret audit, image build, and Trivy scanning. Tagged releases publish a keyless-signed GHCR image with SPDX SBOM and provenance attestation.
 
 ## Local accounts
 
 All local users use `DemoPass!2026`: `viewer@demo.local`, `analyst@demo.local`, `responder@demo.local`, and `admin@demo.local`. These credentials are demonstration fixtures and must never be used outside local development.
 
-## External configuration
+## Public staging configuration
 
-A real OIDC tenant, managed PostgreSQL/Redis endpoints, a public DNS/TLS environment, and a real response provider require user-owned credentials. Kubernetes manifests and environment boundaries are supplied, but the repository does not claim those external resources are deployed.
+The public TLS staging URL uses an Auth0 development tenant and managed PostgreSQL/Redis. Credentials, allowlists, and provider identifiers are environment-owned and deliberately excluded from Git. The repository makes no claim that this free staging topology has production availability or capacity.
 
 ## Delivery semantics
 
