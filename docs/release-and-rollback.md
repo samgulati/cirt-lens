@@ -8,7 +8,7 @@ Before release, require green backend tests, migration validation, the 360-case 
 
 1. Back up PostgreSQL and record the currently deployed image digest.
 2. Run `alembic upgrade head` as a release task before switching traffic.
-3. Deploy the new digest, then verify `/health/live`, `/health/ready`, `/metrics`, login, incident reads, and one dry-run connector action.
+3. Deploy the new digest, then verify `/api/health`, `/api/ready`, `/metrics`, login, incident reads, and one dry-run connector action.
 4. Monitor HTTP error rate, ingestion queue/DLQ depth, worker completion, connector failures, and approval latency.
 
 ## Rollback
