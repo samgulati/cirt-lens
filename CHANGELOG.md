@@ -4,6 +4,8 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 ## Unreleased
 
+## 1.1.0 - 2026-08-24
+
 - Added a tenant-scoped operations control plane for approval, ingestion, DLQ, and connector reconciliation workflows.
 - Made high-impact approvals expire after 30 minutes and become atomically consumed after successful execution.
 - Added tenant ownership to versioned detection rules and expanded isolation tests across operational resources.
