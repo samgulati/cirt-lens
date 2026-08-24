@@ -17,3 +17,6 @@ def workload(noise=5000,clusters=20):
 
 if __name__=="__main__":
     events=workload();started=time.perf_counter();metrics=correlation_metrics(events);metrics["elapsed_ms"]=round((time.perf_counter()-started)*1000,2);metrics["all_pairs"]=len(events)*(len(events)-1)//2;metrics["candidate_reduction_percent"]=round((1-metrics["candidate_pairs"]/metrics["all_pairs"])*100,4);print(json.dumps(metrics,sort_keys=True))
+    if metrics["groups"]!=20:raise SystemExit(f'Expected 20 suspicious groups, found {metrics["groups"]}')
+    if metrics["candidate_reduction_percent"]<99:raise SystemExit("Correlation candidate reduction fell below 99%")
+    if metrics["elapsed_ms"]>5000:raise SystemExit("5,080-event correlation benchmark exceeded the 5-second CI guardrail")
