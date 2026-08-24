@@ -144,7 +144,9 @@ cd backend
 pytest
 ```
 
-The 52-test backend suite covers positive and negative detection boundaries, tenant-aware RBAC, unauthorized action denial, two-person approval, ingestion idempotency, rule lifecycle/replay, cross-batch enrichment, rollback, hostile-string safety, correlation cohesion, scoring, grounded AI output, and Alembic upgrades. Run `PYTHONPATH=. python evaluation/run_evaluation.py` from `backend` for the labeled evaluation set and `npm run test:e2e` in `frontend` for the two Playwright interview workflows.
+The 57-test backend suite covers positive and negative detection boundaries, tenant isolation, RBAC, unauthorized action denial, two-person approval, ingestion idempotency, rule lifecycle/replay, cross-batch enrichment, rollback, hostile-string safety, correlation cohesion, scoring, grounded AI output, and Alembic upgrades.
+
+From `backend`, run `PYTHONPATH=. python evaluation/run_evaluation.py` for the 36-case labeled quality gate. It includes malicious chains, benign traffic, and near-threshold negative cases and enforces minimum precision, recall, classification, correlation, and grounding scores. Run `PYTHONPATH=. python benchmarks/benchmark_pipeline.py` and `PYTHONPATH=. python benchmarks/correlation_benchmark.py` for deterministic 10,000-event pipeline and 5,080-event correlation guardrails. These synthetic measurements demonstrate regression resistance; they are not claims about real-world detection efficacy or production capacity. Run `npm run test:e2e` in `frontend` for the two Playwright interview workflows.
 
 ## Two-Minute Demo
 
@@ -153,7 +155,7 @@ The 52-test backend suite covers positive and negative detection boundaries, ten
 3. Review the critical score breakdown and reconstructed timeline.
 4. Expand raw evidence and inspect simplified ATT&CK mappings.
 5. Ask “What probably happened?” in AI Investigator.
-6. Execute “Revoke active sessions” in Response and confirm the audit entry.
+6. As a Responder, request “Revoke active sessions”; approve it as a different Administrator, then execute it as the Responder.
 7. Add a case note, disposition, and evidence bookmark, then inspect risk history.
 8. Export the Markdown report.
 
@@ -161,8 +163,8 @@ The 52-test backend suite covers positive and negative detection boundaries, ten
 
 - Synthetic telemetry keeps the project safe and reproducible instead of depending on enterprise integrations.
 - Transparent rules demonstrate investigation logic without pretending to provide production anomaly detection.
-- SQLite makes local setup immediate; it is not a distributed event store.
-- SOAR actions are simulations and cannot mutate real infrastructure.
+- SQLite keeps the default local setup immediate; PostgreSQL is used by the public staging blueprint.
+- Most SOAR actions use a deterministic fake connector. Only the allowlisted Auth0 development-tenant `Disable account` action can use the live sandbox connector, and it remains approval-gated.
 - ATT&CK mappings are intentionally simplified demonstration mappings, not authoritative classifications.
 
 ## External production steps

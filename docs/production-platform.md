@@ -3,7 +3,7 @@
 ## Implemented locally
 
 - Local PBKDF2-backed identities and signed JWT sessions; OIDC mode verifies issuer, audience, expiry, algorithm, and signatures through a configured JWKS URL.
-- Tenant IDs on identities, events, incidents, approvals, connector executions, and audit activity.
+- Tenant IDs and enforced query boundaries on identities, events, incidents, approvals, connector executions, search, reports, and audit activity.
 - Viewer, analyst, responder, and administrator role hierarchy enforced by API dependencies.
 - Two-person authorization for high-impact response actions when `AUTH_REQUIRED=true`.
 - Redis Streams ingestion with durable job status, tenant-scoped idempotency keys, retry accounting, consumer acknowledgements, and a dead-letter stream.
@@ -11,8 +11,9 @@
 - Versioned detection-rule catalog with draft, testing, active, and retired states plus non-mutating historical replay.
 - Replaceable response connector contract and deterministic fake identity connector preserving idempotency/provider request IDs.
 - OpenTelemetry request traces, Prometheus metrics, Grafana provisioning, structured request logs, request/incident IDs, and database/Redis readiness.
-- Versioned positive and benign evaluation cases reporting a confusion matrix, precision, recall, classification/correlation accuracy, and AI evidence-grounding validation.
-- CI for migrations, backend tests, evaluation, frontend build, Playwright, dependency audit, image build, and Trivy scanning. Tagged releases publish a versioned GHCR image.
+- A 36-case deterministic labeled evaluation corpus with malicious, benign, and near-threshold cases; CI-enforced precision, recall, classification/correlation, and AI evidence-grounding thresholds.
+- Reproducible 10,000-event pipeline and 5,080-event correlation guardrails with candidate-pair reduction and expected-group checks.
+- CI for migrations, backend tests, evaluation and scale guardrails, frontend build, Playwright, dependency audit, image build, and Trivy scanning. Tagged releases publish a versioned GHCR image.
 
 ## Local accounts
 

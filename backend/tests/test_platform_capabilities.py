@@ -45,9 +45,13 @@ def test_incident_reads_actions_and_demo_generation_are_tenant_scoped(db,now):
     assert client.get('/api/dashboard',headers=responder).json()['kpis']['open_incidents']==0
     assert client.get('/api/events',headers=responder).json()==[]
     assert client.post(f'/api/incidents/{incident.id}/approvals',json={'action':'Revoke active sessions'},headers=responder).status_code==404
+    other_incident=process_raw_telemetry(db,generate_raw_scenario('credential',30102,now),BASELINE_DEVICES,tenant_id='tenant-other')[0][0]
+    assert other_incident.id!=incident.id and other_incident.tenant_id=='tenant-other'
+    assert db.get(Incident,incident.id).tenant_id=='tenant-demo'
     generated=client.post('/api/demo/generate',json={'scenario':'credential'},headers=admin);assert generated.status_code==200
     assert db.get(Incident,generated.json()['id']).tenant_id=='tenant-other'
-    assert len(client.get('/api/incidents',headers=responder).json())==1
+    visible_ids={item['id'] for item in client.get('/api/incidents',headers=responder).json()}
+    assert visible_ids=={other_incident.id,generated.json()['id']}
     app.dependency_overrides.clear()
 
 def test_ingestion_idempotency_and_processing_visibility(db,monkeypatch,now):

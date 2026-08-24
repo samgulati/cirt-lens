@@ -19,5 +19,8 @@ def run(count):
     return validation,detection,correlation
 if __name__=="__main__":
     print("events,validation_ms,detection_ms,correlation_ms,total_ms")
+    failed=False
     for count in (1000,5000,10000):
-        values=run(count);print(f"{count},"+",".join(f"{x*1000:.2f}" for x in (*values,sum(values))))
+        values=run(count);total=sum(values);print(f"{count},"+",".join(f"{x*1000:.2f}" for x in (*values,total)))
+        if count==10000 and total>5:failed=True
+    if failed:raise SystemExit("10,000-event in-process benchmark exceeded the 5-second CI guardrail")
