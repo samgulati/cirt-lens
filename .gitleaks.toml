@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deterministic idempotency key used only by the RBAC denial test"
+condition = "AND"
+paths = ['''backend/tests/test_platform_capabilities\.py''']
+regexes = ['''^denied-analyst-001$''']
