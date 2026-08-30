@@ -14,7 +14,8 @@ RUN npm run build
 FROM python:3.12-alpine
 WORKDIR /app
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apk upgrade --no-cache \
+    && pip install --no-cache-dir -r requirements.txt
 COPY backend .
 COPY --from=frontend /build/dist ./static
 COPY --chmod=755 deploy/start-staging.sh /app/start-staging.sh
