@@ -11,7 +11,7 @@ RUN npm install
 COPY frontend .
 RUN npm run build
 
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 WORKDIR /app
 COPY backend/requirements.txt .
 RUN apk upgrade --no-cache \
