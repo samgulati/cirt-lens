@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cirt-lens.onrender.com/sitemap.xml
