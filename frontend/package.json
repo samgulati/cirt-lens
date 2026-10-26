@@ -35,6 +35,6 @@
     "jsdom": "^30.0.1",
     "prettier": "latest",
     "typescript-eslint": "latest",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
